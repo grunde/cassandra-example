@@ -136,7 +136,7 @@ def main():
     log.info("creating keyspace...")
     session.execute("""
             CREATE KEYSPACE IF NOT EXISTS %s
-            WITH replication = { 'class': 'SimpleStrategy', 'replication_factor': '2' }
+            WITH replication = { 'class': 'SimpleStrategy', 'replication_factor': '3' }
             """ % KEYSPACE)
 
     session.set_keyspace(KEYSPACE)
@@ -148,6 +148,7 @@ def main():
     section_id text,
     feed_id text,
     ts timestamp,
+    item_id text,
     action text,
     data blob,
     PRIMARY KEY ((section_id, feed_id), ts)
@@ -161,14 +162,13 @@ def main():
     log.info("starting from %s", now)
 
     prepared = session.prepare("""
-            INSERT INTO "{}" (section_id, feed_id, ts, action, data)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT INTO "{}" (section_id, feed_id, ts, item_id, action, data)
+            VALUES (?, ?, ?, ?, ?, ?)
             """.format(TABLE))
 
-
     for i in xrange(10000):
-        session.execute(prepared.bind((str(SECTION), str(FEED), now + i*1000, "UPSERT", msgpack.packb(products[i % len(products)]))))
-
+        product = products[i % len(products)]
+        session.execute(prepared.bind((str(SECTION), str(FEED), now + i*1000, product['sku'], "UPSERT", msgpack.packb(product))))
 
     future = session.execute_async('SELECT * FROM "{}" limit 1'.format(TABLE))
     try:
@@ -178,6 +178,6 @@ def main():
 
     log.info("fetching one item from table")
     for row in rows:
-        log.info('feed_id={}, ts={}, action={}, data={}'.format(row.feed_id, row.ts, row.action, msgpack.unpackb(row.data)))
+        log.info('feed_id={}, ts={}, item_id={}, action={}, data={}'.format(row.feed_id, row.ts, row.item_id, row.action, msgpack.unpackb(row.data)))
 
 main()
